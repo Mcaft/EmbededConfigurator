@@ -3,7 +3,7 @@
 import os
 import sys
 
-from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
 from core.config import resource_path
 from ui.main_window import MainWindow
@@ -27,7 +27,19 @@ def _load_icon():
     return QtGui.QIcon()
 
 
+def _enable_high_dpi():
+    """开启高 DPI 缩放，必须在创建 QApplication 之前调用。"""
+    QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+    # 允许 125% / 150% 等非整数缩放，避免被取整后界面偏小（Qt 5.14+）
+    policy = getattr(QtCore.Qt, "HighDpiScaleFactorRoundingPolicy", None)
+    if policy is not None:
+        QtGui.QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+            policy.PassThrough)
+
+
 def main():
+    _enable_high_dpi()
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(_load_stylesheet())
