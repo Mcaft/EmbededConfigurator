@@ -3,14 +3,14 @@
 import os
 import sys
 
-from PyQt5 import QtWidgets
+from PyQt5 import QtGui, QtWidgets
 
-from core.config import app_dir
+from core.config import resource_path
 from ui.main_window import MainWindow
 
 
 def _load_stylesheet():
-    path = os.path.join(app_dir(), "ui", "style.qss")
+    path = resource_path(os.path.join("ui", "style.qss"))
     try:
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
@@ -18,11 +18,23 @@ def _load_stylesheet():
         return ""
 
 
+def _load_icon():
+    # 优先用 .ico（Windows 任务栏/窗口图标），回退到 .svg
+    for name in ("icon.ico", "icon.svg"):
+        path = resource_path(name)
+        if os.path.exists(path):
+            return QtGui.QIcon(path)
+    return QtGui.QIcon()
+
+
 def main():
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(_load_stylesheet())
+    icon = _load_icon()
+    app.setWindowIcon(icon)
     win = MainWindow()
+    win.setWindowIcon(icon)
     win.show()
     sys.exit(app.exec_())
 

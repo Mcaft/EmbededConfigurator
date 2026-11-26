@@ -1,5 +1,5 @@
 
-Orin NX 地面站配置工具
+EmbededConfigurator（Orin NX 地面站配置工具）
 
 1. 项目背景
    上位机（Windows 地面站）需要通过 USB RNDIS 与 Orin NX 建立网络连接，完成对 Orin NX 的 WiFi 配置、网络配置和状态监控。目标设备无屏幕、无键盘，所有操作必须通过 SSH 远程完成。

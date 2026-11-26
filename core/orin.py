@@ -280,7 +280,8 @@ class OrinClient:
             't=$(cat "$d/type" 2>/dev/null); v=$(cat "$d/temp" 2>/dev/null); '
             'echo "$t:$v"; done; '
             'echo "===DISK==="; df -h /; '
-            'echo "===UPTIME==="; uptime'
+            'echo "===UPTIME==="; uptime; '
+            'echo "===GPU==="; timeout 2 tegrastats --interval 1000 2>/dev/null | tail -n 1'
         )
         code, out, err = self._run(script, timeout=CMD_TIMEOUT, log=False)
         if code is None and not out:
@@ -290,7 +291,7 @@ class OrinClient:
     @staticmethod
     def _parse_status(out):
         status = {"ips": [], "wifi": [], "cpu": None, "memory": None,
-                  "temperatures": [], "disk": None, "uptime": ""}
+                  "temperatures": [], "disk": None, "uptime": "", "gpu": None}
         sections = re.split(r"^===(\w+)===\s*$", out, flags=re.MULTILINE)
         for i in range(1, len(sections) - 1, 2):
             key = sections[i]
@@ -309,6 +310,8 @@ class OrinClient:
                 status["disk"] = OrinClient._parse_disk(content)
             elif key == "UPTIME":
                 status["uptime"] = content.strip()
+            elif key == "GPU":
+                status["gpu"] = OrinClient._parse_tegrastats(content)
         return status
 
     @staticmethod
@@ -355,15 +358,17 @@ class OrinClient:
         dt = sum(v2) - sum(v1)
         if dt <= 0:
             return None
-        idle = (v2[3] + v2[4]) - (v1[3] + v1[4])            # idle + iowait
-        user = (v2[0] + v2[1]) - (v1[0] + v1[1])            # user + nice
+        idle = (v2[3]) - (v1[3])                              # idle
+        iowait = (v2[4]) - (v1[4])                            # iowait
+        user = (v2[0] + v2[1]) - (v1[0] + v1[1])              # user + nice
         sys_ = (v2[2] + v2[5] + v2[6]) - (v1[2] + v1[5] + v1[6])  # system+irq+softirq
+        busy = dt - idle - iowait
         return {
             "user": round(user / dt * 100, 1),
             "system": round(sys_ / dt * 100, 1),
             "idle": round(idle / dt * 100, 1),
-            "wait": None,
-            "usage": round((1 - idle / dt) * 100, 1),
+            "wait": round(iowait / dt * 100, 1),
+            "usage": round(busy / dt * 100, 1),
         }
 
     @staticmethod
@@ -406,3 +411,37 @@ class OrinClient:
                 return {"filesystem": parts[0], "size": parts[1], "used": parts[2],
                         "available": parts[3], "percent": parts[4]}
         return None
+
+    @staticmethod
+    def _parse_tegrastats(content):
+        """解析 tegrastats 采样行，尽量容错地提取 GPU / EMC / 功耗 / 温度。
+
+        不同 L4T 版本的输出格式差异较大，这里只按正则提取能识别的字段，
+        提取不到的字段保持 None，由界面层兜底显示。
+        """
+        lines = [l for l in (content or "").splitlines() if l.strip()]
+        if not lines:
+            return None
+        line = lines[-1]
+        info = {"gpu": None, "emc": None, "power": None, "temp": None,
+                "ram": None, "raw": line}
+
+        m = re.search(r"GR3D_FREQ\s+(\d+)%", line)
+        if m:
+            info["gpu"] = int(m.group(1))
+        m = re.search(r"EMC_FREQ\s+(\d+)%", line)
+        if m:
+            info["emc"] = int(m.group(1))
+        m = re.search(r"RAM\s+(\d+)/(\d+)MB", line)
+        if m:
+            info["ram"] = f"{m.group(1)}/{m.group(2)} MB"
+
+        # 功耗：取所有 mW 数值的最大值（覆盖 VDD_IN / POM_5V_IN 等不同命名）
+        powers = [int(x) for x in re.findall(r"(\d+)mW", line)]
+        if powers:
+            info["power"] = max(powers)
+        # 温度：匹配 AO@ / GPU@ / Tdiode@ / tj@ / PMIC@ 等常见采样点
+        temps = [float(x) for x in re.findall(r"(?:AO|GPU|Tdiode|tj|PMIC)@([\d.]+)C", line)]
+        if temps:
+            info["temp"] = max(temps)
+        return info

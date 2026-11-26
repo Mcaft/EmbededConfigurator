@@ -1,2 +1,13 @@
+# 运行生成 / 敏感文件
 config.json
-hc_configurator.log
+*.log
+__pycache__/
+
+# 打包产物
+build/
+dist/
+*.spec
+
+# 工具目录
+.claude/
+.vscode/

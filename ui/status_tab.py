@@ -4,9 +4,13 @@ import datetime
 
 from PyQt5 import QtCore, QtWidgets
 
+from core.config import STATUS_POLL_INTERVAL_MS
+
 
 class StatusTab(QtWidgets.QWidget):
     refresh_requested = QtCore.pyqtSignal()
+    auto_toggled = QtCore.pyqtSignal(bool)
+    interval_changed = QtCore.pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -17,11 +21,16 @@ class StatusTab(QtWidgets.QWidget):
 
         top = QtWidgets.QHBoxLayout()
         self.refresh_btn = QtWidgets.QPushButton("手动刷新")
-        self.auto_check = QtWidgets.QCheckBox("自动刷新（3~5 秒）")
+        self.auto_check = QtWidgets.QCheckBox("自动刷新")
         self.auto_check.setChecked(True)
+        self.interval_spin = QtWidgets.QSpinBox()
+        self.interval_spin.setRange(1, 60)
+        self.interval_spin.setValue(STATUS_POLL_INTERVAL_MS // 1000)
+        self.interval_spin.setSuffix(" 秒")
         self.last_update = QtWidgets.QLabel("")
         top.addWidget(self.refresh_btn)
         top.addWidget(self.auto_check)
+        top.addWidget(self.interval_spin)
         top.addStretch(1)
         top.addWidget(self.last_update)
         layout.addLayout(top)
@@ -70,6 +79,13 @@ class StatusTab(QtWidgets.QWidget):
         form.addWidget(self.temp_label, row, 1)
         row += 1
 
+        form.addWidget(QtWidgets.QLabel("GPU / 功耗："), row, 0, QtCore.Qt.AlignTop)
+        self.gpu_label = QtWidgets.QLabel("-")
+        self.gpu_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.gpu_label.setWordWrap(True)
+        form.addWidget(self.gpu_label, row, 1)
+        row += 1
+
         form.addWidget(QtWidgets.QLabel("磁盘占用："), row, 0)
         self.disk_bar = QtWidgets.QProgressBar()
         self.disk_bar.setRange(0, 100)
@@ -92,6 +108,8 @@ class StatusTab(QtWidgets.QWidget):
         layout.addStretch(1)
 
         self.refresh_btn.clicked.connect(self.refresh_requested)
+        self.auto_check.toggled.connect(self.auto_toggled)
+        self.interval_spin.valueChanged.connect(self.interval_changed)
 
     def update_status(self, status):
         if status.get("ips"):
@@ -114,6 +132,8 @@ class StatusTab(QtWidgets.QWidget):
                 parts.append(f"用户 {cpu['user']}%")
             if cpu.get("system") is not None:
                 parts.append(f"系统 {cpu['system']}%")
+            if cpu.get("wait") is not None:
+                parts.append(f"IO等待 {cpu['wait']}%")
             self.cpu_label.setText("  ".join(parts))
         else:
             self.cpu_bar.setValue(0)
@@ -133,6 +153,21 @@ class StatusTab(QtWidgets.QWidget):
                 f"{t['name']}: {t['celsius']:.1f} ℃" for t in temps))
         else:
             self.temp_label.setText("（无温度数据）")
+
+        gpu = status.get("gpu")
+        if gpu:
+            parts = []
+            if gpu.get("gpu") is not None:
+                parts.append(f"GPU {gpu['gpu']}%")
+            if gpu.get("emc") is not None:
+                parts.append(f"EMC {gpu['emc']}%")
+            if gpu.get("power") is not None:
+                parts.append(f"功耗 {gpu['power']} mW")
+            if gpu.get("temp") is not None:
+                parts.append(f"GPU温度 {gpu['temp']:.1f} ℃")
+            self.gpu_label.setText("  ".join(parts) if parts else "（无法解析 GPU 数据）")
+        else:
+            self.gpu_label.setText("（tegrastats 不可用）")
 
         disk = status.get("disk")
         if disk:
@@ -158,6 +193,7 @@ class StatusTab(QtWidgets.QWidget):
         self.mem_bar.setValue(0)
         self.mem_label.setText("")
         self.temp_label.setText("-")
+        self.gpu_label.setText("-")
         self.disk_bar.setValue(0)
         self.disk_label.setText("")
         self.uptime_label.setText("-")
