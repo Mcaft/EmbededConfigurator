@@ -5,7 +5,9 @@ import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from core import scaling
 from core.config import resource_path
+from core.store import Store
 from ui.main_window import MainWindow
 
 
@@ -19,8 +21,12 @@ def _load_stylesheet():
 
 
 def _load_icon():
-    # 优先用 .ico（Windows 任务栏/窗口图标），回退到 .svg
-    for name in ("icon.ico", "icon.svg"):
+    # Windows 优先 .ico（任务栏/窗口图标），Linux 优先 .png / .svg
+    if sys.platform.startswith("win"):
+        names = ("icon.ico", "icon.png", "icon.svg")
+    else:
+        names = ("icon.png", "icon.svg", "icon.ico")
+    for name in names:
         path = resource_path(name)
         if os.path.exists(path):
             return QtGui.QIcon(path)
@@ -42,7 +48,11 @@ def main():
     _enable_high_dpi()
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle("Fusion")
-    app.setStyleSheet(_load_stylesheet())
+
+    # 界面缩放：读取上次保存的缩放比例（Ctrl+= / Ctrl+- / Ctrl+0 调整）
+    scaling.set_base_stylesheet(_load_stylesheet())
+    scaling.set_scale(Store().get("ui_scale", scaling.DEFAULT_SCALE))
+    app.setStyleSheet(scaling.scale_stylesheet())
     icon = _load_icon()
     app.setWindowIcon(icon)
     win = MainWindow()

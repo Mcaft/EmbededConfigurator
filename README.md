@@ -1,6 +1,6 @@
 # Orin NX 地面站配置工具（EmbededConfigurator）
 
-Windows 上位机，通过 USB RNDIS 与 Orin NX 建立网络连接，用 SSH 完成对 Orin NX 的
+Windows / Linux 上位机，通过 USB RNDIS 与 Orin NX 建立网络连接，用 SSH 完成对 Orin NX 的
 WiFi 配置、网络（IP）配置、热点（AP）配置与状态监控。目标设备无屏幕、无键盘，
 所有操作均通过 SSH 远程完成。
 
@@ -18,13 +18,18 @@ EmbededConfigurator/
 ├── main.py                 # 程序入口（加载 QSS 主题 + 窗口图标）
 ├── config.json             # 外部配置文件（板卡连接配置等）
 ├── icon.svg                # 图标源文件
-├── icon.ico                # 由 icon.svg 生成的多尺寸图标（程序/窗口图标）
-├── build.bat               # 一键打包脚本
+├── icon.ico                # 由 icon.svg 生成的多尺寸图标（Windows 程序/窗口图标）
+├── icon.png                # 由 icon.svg 生成的 256px 图标（Linux 程序/窗口图标）
+├── build.bat               # Windows 一键打包脚本
+├── build.sh                # Linux 一键打包脚本
+├── run.bat / run.sh        # 启动脚本
+├── .github/workflows/      # GitHub Actions（Linux 包自动构建）
 ├── core/
 │   ├── config.py           # 常量与超时配置（仅兜底默认值）
 │   ├── store.py            # 读写 config.json 持久化（板卡列表等）
 │   ├── logger.py           # 文件 + UI 日志
-│   ├── rndis.py            # RNDIS 网卡检测 / 本机 IP 配置
+│   ├── scaling.py          # 界面缩放（QSS px 按比例重写）
+│   ├── rndis.py            # USB 网卡检测 / 本机 IP 配置（Windows/Linux）
 │   ├── ssh_client.py       # paramiko SSH 封装（含 keepalive 保活）
 │   ├── orin.py             # WiFi/IP/热点/状态 命令封装与解析
 │   ├── bashrc.py           # 远程 ~/.bashrc 读取/写入 + ROS 环境行解析
@@ -48,8 +53,7 @@ EmbededConfigurator/
 │   ├── process_tab.py      # 任务管理器（进程）
 │   ├── status_tab.py       # 状态显示
 │   └── main_window.py      # 主窗口（左侧导航栏 + 页面栈）
-├── requirements.txt
-└── run.bat
+└── requirements.txt
 ```
 
 ## 安装与运行
@@ -71,6 +75,22 @@ EmbededConfigurator/
 
 > 配置本机静态 IP（192.168.55.100）需要管理员权限：非管理员运行时，程序会通过 UAC
 > 弹窗请求提权；也可直接「以管理员身份运行」。
+
+### Linux
+
+```bash
+# Debian / Ubuntu：Qt 运行所需的基础库
+sudo apt install -y python3-pip libxcb-xinerama0 libxkbcommon-x11-0 libgl1
+pip3 install -r requirements.txt
+./run.sh          # 或 python3 main.py
+```
+
+- USB 网卡一般显示为 `usb0` 或 `enx*`，程序通过 `/sys/class/net/*/device/driver`
+  识别 `rndis_host` / `cdc_ether` / `cdc_ncm`。
+- 配置本机静态 IP 需要 root：以 root 运行，或安装 polkit（`pkexec`）后由程序弹出授权框。
+- 若 NetworkManager 接管该网卡导致 IP 被重置，可执行 `nmcli device set usb0 managed no`。
+- 界面缩放：`Ctrl + =` 放大、`Ctrl + -` 缩小、`Ctrl + 0` 复位（0.8~1.6 倍），
+  比例保存在 `config.json` 的 `ui_scale`。
 
 ## 板卡与连接方式（写在外部 config.json）
 
@@ -148,7 +168,11 @@ SSH 账号、密码**不写在代码里**，而是放在程序目录下的外部
      自动刷新，可关闭自动刷新或调整刷新间隔；日志面板支持清空与导出完整日志文件。页面内含
      「任务管理器」子页，可查看远端进程的 PID / 用户 / CPU / 内存 / RSS / 命令。
 
-## 打包（生成 exe）
+## 打包（生成可执行文件）
+
+PyInstaller 不支持交叉编译：Windows 包需在 Windows 上构建，Linux 包需在 Linux 上构建。
+
+### Windows（exe）
 
 用 `icon.svg` 生成的 `icon.ico` 作为程序图标与窗口图标。打包前先安装 PyInstaller 与 Pillow：
 
@@ -174,6 +198,19 @@ copy /y config.json "dist\EmbededConfigurator\config.json"
 > 打包成单文件夹（one-folder）而非单文件，是为了让 `config.json` 保持为可编辑的外部文件。
 > 若需重新生成图标：用 Qt 渲染 `icon.svg` 后经 Pillow 写出 `icon.ico`（见 `icon.ico` 生成过程）。
 
+### Linux
+
+```bash
+pip install pyinstaller
+./build.sh
+```
+
+产物在 `dist/EmbededConfigurator/`（可执行文件 `EmbededConfigurator`，图标使用 `icon.png`）。
+目标机器需要提供 Qt 基础库，如 `libxcb-xinerama0`、`libxkbcommon-x11-0`、`libgl1`。
+
+仓库内置 `.github/workflows/build-linux.yml`：推送 `v*` 标签（或手动触发）时，
+在 ubuntu-22.04 上自动构建并上传 `EmbededConfigurator-linux-x86_64.tar.gz` 到对应 Release。
+
 ## 关键说明
 
 - **保活**：SSH 连接启用了 keepalive（10s），避免 RNDIS / sshd 空闲或链路抖动导致的被动断开。
@@ -186,4 +223,6 @@ copy /y config.json "dist\EmbededConfigurator\config.json"
 - **单网卡角色**：同一张无线网卡通常不能同时做 STA（连 WiFi）与 AP（开热点），
   开启热点前请先断开 WiFi 客户端连接。
 - **首次启动限制**：若 Orin NX 未完成 OOBE（初始用户创建），SSH 不可用，需先通过串口完成初始化。
+- **界面缩放**：`Ctrl + =` 放大、`Ctrl + -` 缩小、`Ctrl + 0` 复位（0.8~1.6 倍），
+  比例保存在 `config.json` 的 `ui_scale`；程序同时启用了 Qt 高 DPI 缩放，适配 125%/150%/200% 缩放屏。
 - 日志保存在程序目录下 `embededconfigurator.log`，最近使用的参数保存在 `config.json`。

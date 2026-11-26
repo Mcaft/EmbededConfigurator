@@ -3,7 +3,8 @@
    ============================================================ */
 
 * {
-    font-family: "Microsoft YaHei", "Segoe UI", "PingFang SC", sans-serif;
+    font-family: "Microsoft YaHei", "Segoe UI", "PingFang SC",
+                 "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", sans-serif;
     font-size: 13px;
 }
 
@@ -199,7 +200,7 @@ QPlainTextEdit {
     border: 1px solid #343c49;
     border-radius: 5px;
     color: #9fb3c8;
-    font-family: "Consolas", "Courier New", monospace;
+    font-family: "Consolas", "Courier New", "DejaVu Sans Mono", "Noto Sans Mono", monospace;
     font-size: 12px;
 }
 

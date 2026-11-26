@@ -20,6 +20,7 @@ DEFAULT_CONFIG = {
     "last_hotspot_ssid": "HC-Hotspot",
     "last_hotspot_password": "",
     "last_hotspot_autoconnect": True,
+    "ui_scale": 1.0,
 }
 
 

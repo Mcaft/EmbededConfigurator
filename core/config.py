@@ -4,7 +4,7 @@ import os
 import sys
 
 APP_NAME = "EmbededConfigurator"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 # ---- Orin NX 连接参数 ----
 ORIN_IP = "192.168.55.1"       # L4T RNDIS 默认网关地址

@@ -2,8 +2,9 @@
 """主窗口。"""
 import shutil
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets
 
+from core import scaling
 from core.bashrc import BashrcManager
 from core.config import (
     APP_NAME,
@@ -42,7 +43,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} — Orin NX 地面站配置工具")
-        self.resize(940, 780)
+        self.resize(scaling.scale_px(940), scaling.scale_px(780))
 
         self.store = Store()
         self.logger = Logger()
@@ -68,6 +69,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._poll_interval_ms = STATUS_POLL_INTERVAL_MS
 
         self._build_ui()
+        self._setup_zoom_shortcuts()
         self._startup_check()
 
     # ---------------- UI ----------------
@@ -93,7 +95,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.nav = QtWidgets.QListWidget()
         self.nav.setObjectName("navList")
-        self.nav.setFixedWidth(160)
+        self.nav.setFixedWidth(scaling.scale_px(160))
         self.nav.setFocusPolicy(QtCore.Qt.NoFocus)
         body.addWidget(self.nav)
 
@@ -176,6 +178,34 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._set_tabs_enabled(False)
         self._populate_boards()
+
+    # ---------------- 界面缩放 ----------------
+    def _setup_zoom_shortcuts(self):
+        for seq in ("Ctrl+=", "Ctrl++"):
+            QtWidgets.QShortcut(QtGui.QKeySequence(seq), self,
+                                activated=self._zoom_in)
+        QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+-"), self,
+                            activated=self._zoom_out)
+        QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+0"), self,
+                            activated=self._zoom_reset)
+
+    def _zoom_in(self):
+        self._apply_ui_scale(scaling.get_scale() + scaling.STEP)
+
+    def _zoom_out(self):
+        self._apply_ui_scale(scaling.get_scale() - scaling.STEP)
+
+    def _zoom_reset(self):
+        self._apply_ui_scale(scaling.DEFAULT_SCALE)
+
+    def _apply_ui_scale(self, factor):
+        scale = scaling.set_scale(factor)
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(scaling.scale_stylesheet())
+        self.nav.setFixedWidth(scaling.scale_px(160))
+        self.store.set("ui_scale", scale)
+        self.logger.info(f"界面缩放：{int(round(scale * 100))}%")
 
     def _set_tabs_enabled(self, enabled):
         # 网络配置 / ROS 环境 / ROS 运行 / 系统服务 / 时钟同步需连接后才可用，
@@ -270,12 +300,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if adapter is None:
             self.conn_bar.set_rndis_status("未检测到")
             self.conn_bar.set_host_ip("-")
-            self.logger.warn("未检测到 RNDIS 网卡，请确认 USB 数据线已连接并安装 RNDIS 驱动。")
+            self.logger.warn("未检测到 RNDIS 网卡，请确认 USB 数据线已连接、系统已识别到 USB 网卡。")
             QtWidgets.QMessageBox.warning(
                 self, "未检测到 RNDIS",
                 "未检测到 RNDIS 网卡。\n\n请检查：\n"
-                "1. USB 数据线是否连接到 Orin NX 的 Device 模式 Type-C 口；\n"
-                "2. Windows 是否正确识别了 RNDIS 设备（可能需要安装 RNDIS 驱动）。")
+                "1. USB 数据线是否连接到目标设备的 Device 模式 Type-C 口；\n"
+                "2. 系统是否已识别 USB 网卡（Windows 可能需要安装 RNDIS 驱动；\n"
+                "   Linux 下一般为 usb0 / enx* 网卡）。")
             return
         self._rndis_name = adapter["name"]
         self.conn_bar.set_rndis_status(f"{adapter['name']}（{adapter['status']}）")
